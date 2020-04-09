@@ -1,0 +1,15 @@
+plugins {
+  id 'java'
+  id 'application'
+}
+
+repositories {
+  jcenter() 
+}
+
+dependencies {
+  compile 'com.fazecast:jSerialComm:[2.0.0,3.0.0)'
+  compile project(":esp8266lib")
+}
+
+mainClassName = 'Main'

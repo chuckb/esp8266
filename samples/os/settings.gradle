@@ -1,0 +1,2 @@
+include ":esp8266lib"
+project(":esp8266lib").projectDir = file("../../lib")
