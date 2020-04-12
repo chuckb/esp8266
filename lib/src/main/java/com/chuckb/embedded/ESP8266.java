@@ -23,6 +23,8 @@ import java.util.Set;
 public class ESP8266 {
   private final PrintStream printStream;
   private final BufferedReader bufferedASCIIReader;
+  private final OutputStream outputStream;
+  private final InputStream inputStream;
   private final String LINE_END = "\r\n";
   private final String AT = "AT";
   private final String GETMODULERELEASE = "GMR";
@@ -37,6 +39,8 @@ public class ESP8266 {
   private final String SETMUXMODE = "CIPMUX=";
   private final String IPSTART = "CIPSTART=";
   private final String SETIPSERVER = "CIPSERVER=";
+  private final String DISABLE_ECHO = "ATE0";
+  private final String ENABLE_ECHO = "ATE1";
 
   public enum WifiModeEnum 
   { 
@@ -103,11 +107,15 @@ public class ESP8266 {
     // Rig up streams so we can read/write to them easily.
     printStream = new PrintStream(outputStream, true, Charset.forName("US-ASCII"));
     bufferedASCIIReader = new BufferedReader(new InputStreamReader(inputStream, Charset.forName("US-ASCII")));
+    if (isReady()) {
+      disableEcho();
+    }
   }
 
   /**
    * Send a command to the module. This function will prepend the AT start sequence
-   * and flush the contents to the module automatically.
+   * and flush the contents to the module automatically. If a blank command is sent,
+   * the AT sequence by itself will be sent.
    * @param command
    */
   private void sendCommand(String command) {
@@ -118,6 +126,25 @@ public class ESP8266 {
     }
     printStream.print(LINE_END);
     printStream.flush();
+  }
+
+  /**
+   * Send a raw command to the device. What you send is exactly what is sent.
+   * @param command
+   */
+  private void sendRawCommand(String command) {
+    printStream.print(command);
+    printStream.flush();
+  }
+
+  public void disableEcho() {
+    sendRawCommand(DISABLE_ECHO);
+    // TODO: What is returned here?
+  }
+
+  public void enableEcho() {
+    sendRawCommand(ENABLE_ECHO);
+    // TODO: What is returned here?
   }
 
   /**
