@@ -1,15 +1,11 @@
 package com.chuckb.embedded;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.HashSet;
-import java.util.Scanner;
 import java.util.Set;
 
 /**
@@ -458,7 +454,11 @@ public class ESP8266 {
    * @throws ResponseFailedException    Thrown if the command reply is not as expected.
    * @throws ResponseTimeoutException   Thrown if the timeout waiting for a reply failed.
    */
-  public Set<AccessPoint> getAccessPoints(long msTimeout) throws IOException, ProtocolException, ResponseFailedException, ResponseTimeoutException {
+  public Set<AccessPoint> getAccessPoints(long msTimeout) throws 
+      IOException, 
+      ProtocolException, 
+      ResponseFailedException, 
+      ResponseTimeoutException {
     Set<AccessPoint> accessPoints = new HashSet<AccessPoint>();
     sendCommand(LISTACCESSPOINTS);
     String line = readLine(100, msTimeout);
@@ -488,7 +488,11 @@ public class ESP8266 {
    * @throws ResponseFailedException    Thrown if the command reply is not as expected.
    * @throws ResponseTimeoutException   Thrown if the default timeout waiting for a reply failed.
    */
-  public Set<AccessPoint> getAccessPoints() throws IOException, ProtocolException, ResponseFailedException, ResponseTimeoutException {
+  public Set<AccessPoint> getAccessPoints() throws 
+      IOException, 
+      ProtocolException, 
+      ResponseFailedException, 
+      ResponseTimeoutException {
     return getAccessPoints(defaultMsTimeout);
   }
   
