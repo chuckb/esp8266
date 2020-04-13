@@ -3,6 +3,8 @@ package com.chuckb.embedded;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.HashSet;
@@ -22,29 +24,41 @@ public class ESP8266 {
   private final OutputStream outputStream;
   private final InputStream inputStream;
   private final Charset defaulCharset;
-  private final long DEFAULT_MS_TIMEOUT = 200;
-  private long defaultMsTimeout = DEFAULT_MS_TIMEOUT;
   private final String DEFAULT_CHARSET_NAME = "US-ASCII";
   private final String LINE_END = "\r\n";
-  private final String AT = "AT";
-  private final String GETMODULERELEASE = "GMR";
-  private final String RESPONSE_OK = "OK\r\n";
-  private final String RESPONSE_ERROR = "ERROR\r\n";
-  private final String RESPONSE_OK_TRIMMED = "OK";
-  private final String RESPONSE_ERROR_TRIMMED = "ERROR";
-  private final String LISTACCESSPOINTS = "CWLAP";
-  private final String GETWIFIMODE = "CWMODE?";
-  private final String SETWIFIMODE = "CWMODE=";
-  private final String NOCHANGE = "no change";
-  private final String RESTART = "RST";
-  private final String READY = "ready\r\n";
-  private final String GETIP = "CIFSR";
-  private final String SETMUXMODE = "CIPMUX=";
-  private final String IPSTART = "CIPSTART=";
-  private final String SETIPSERVER = "CIPSERVER=";
-  private final String DISABLE_ECHO = "ATE0";
-  private final String ENABLE_ECHO = "ATE1";
-  private final String REPLY_WIFI_MODE = "+CWMODE:";
+
+  // Timeouts
+  private final int CLIENT_CONNECT_TIMEOUT = 10000;          // When waiting on a data packet arrive
+  public long defaultMsTimeout = 200;                       // The default timeout waiting for general responses
+  public long defaultLongMsTimeout = 3000;                  // For certain long operations, like a restart, or finding access points, this timeout will be used.
+  
+  // AT Commands
+  private final String AT_CMD_AT = "AT";
+  private final String AT_CMD_GET_MODULE_RELEASE = "GMR";
+  private final String AT_CMD_LIST_ACCESS_POINTS = "CWLAP";
+  private final String AT_CMD_GET_WIFI_MODE = "CWMODE?";
+  private final String AT_CMD_SET_WIFI_MODE = "CWMODE=";
+  private final String AT_CMD_RESTART = "RST";
+  private final String AT_CMD_GET_IP = "CIFSR";
+  private final String AT_CMD_SET_MUX_MODE = "CIPMUX=";
+  private final String AT_CMD_SET_IP_SERVER = "CIPSERVER=";
+  private final String AT_CMD_SET_IP_START = "CIPSTART=";
+  private final String AT_CMD_DISABLE_ECHO = "ATE0";
+  private final String AT_CMD_ENABLE_ECHO = "ATE1";
+  private final String AT_CMD_SEND = "CIPSEND=";
+  private final String AT_CMD_RECEIVE = "+IPD,";
+  private final String AT_CMD_JOIN_ACCESS_POINT = "CWJAP=";
+  private final String AT_CMD_IP_CLOSE = "CIPCLOSE";
+  
+  // AT Responses
+  private final String AT_RSP_OK_CRLF = "OK\r\n";
+  private final String AT_RSP_ERROR_CRLF = "ERROR\r\n";
+  private final String AT_RSP_FAIL_CRLF = "FAIL\r\n";
+  private final String AT_RSP_OK = "OK";
+  private final String AT_RSP_ERROR = "ERROR";
+  private final String AT_RSP_NO_CHANGE = "no change";
+  private final String AT_RSP_READY_CRLF = "ready\r\n";
+  private final String AT_RSP_WIFI_MODE = "+CWMODE:";
 
   public enum WifiModeEnum 
   { 
@@ -176,9 +190,9 @@ public class ESP8266 {
    */
   private void sendCommand(String command) throws IOException {
     if (command == "") {
-      print(AT);
+      print(AT_CMD_AT);
     } else {
-      print(AT + "+" + command);
+      print(AT_CMD_AT + "+" + command);
     }
     print(LINE_END);
     flush();
@@ -350,9 +364,9 @@ public class ESP8266 {
    * @throws ResponseTimeoutException   Thrown if the timeout waiting for a reply failed.
    */
   public void disableEcho(long msTimeout) throws IOException, ResponseFailedException, ResponseTimeoutException {
-    sendRawCommand(DISABLE_ECHO);
+    sendRawCommand(AT_CMD_DISABLE_ECHO);
     sendRawCommand(LINE_END);
-    readForResponses(RESPONSE_OK, RESPONSE_ERROR, msTimeout);
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
   }
 
   /**
@@ -375,9 +389,9 @@ public class ESP8266 {
    * @throws ResponseTimeoutException   Thrown if the timeout waiting for a reply failed.
    */
   public void enableEcho(long msTimeout) throws IOException, ResponseFailedException, ResponseTimeoutException {
-    sendRawCommand(ENABLE_ECHO);
+    sendRawCommand(AT_CMD_ENABLE_ECHO);
     sendRawCommand(LINE_END);
-    readForResponses(RESPONSE_OK, RESPONSE_ERROR, msTimeout);
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
   }
 
   /**
@@ -400,11 +414,11 @@ public class ESP8266 {
    * @throws ResponseTimeoutException   Thrown if the timeout waiting for a reply failed.
    */
   public String getFirmwareVersion(long msTimeout) throws IOException, ResponseFailedException, ResponseTimeoutException {
-    sendCommand(GETMODULERELEASE);
+    sendCommand(AT_CMD_GET_MODULE_RELEASE);
     // Convert byte array to string version
     String version = readLine(30, msTimeout);
     // Get the OK response
-    readForResponses(RESPONSE_OK, RESPONSE_ERROR, msTimeout);
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
     return version;
   }
 
@@ -428,7 +442,7 @@ public class ESP8266 {
   public boolean isReady(long msTimeout) {
     try {
       sendCommand("");
-      readForResponses(RESPONSE_OK, RESPONSE_ERROR, msTimeout);
+      readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
       return true;
     } catch (Exception e) {
       return false;
@@ -460,7 +474,7 @@ public class ESP8266 {
       ResponseFailedException, 
       ResponseTimeoutException {
     Set<AccessPoint> accessPoints = new HashSet<AccessPoint>();
-    sendCommand(LISTACCESSPOINTS);
+    sendCommand(AT_CMD_LIST_ACCESS_POINTS);
     String line = readLine(100, msTimeout);
 
     while(true) {
@@ -468,9 +482,9 @@ public class ESP8266 {
         case "":
           line = readLine(100, msTimeout);
           break;
-        case RESPONSE_OK_TRIMMED:
+        case AT_RSP_OK:
           return accessPoints;
-        case RESPONSE_ERROR_TRIMMED:
+        case AT_RSP_ERROR:
           throw new ResponseFailedException("Device not in station or dual mode.");
         default:
           AccessPoint accessPoint = new AccessPoint(line);
@@ -486,14 +500,14 @@ public class ESP8266 {
    * @throws IOException        If the serial port has a problem.
    * @throws ProtocolException  If protocol interaction with module does not function as expected.
    * @throws ResponseFailedException    Thrown if the command reply is not as expected.
-   * @throws ResponseTimeoutException   Thrown if the default timeout waiting for a reply failed.
+   * @throws ResponseTimeoutException   Thrown if the long default timeout waiting for a reply failed.
    */
   public Set<AccessPoint> getAccessPoints() throws 
       IOException, 
       ProtocolException, 
       ResponseFailedException, 
       ResponseTimeoutException {
-    return getAccessPoints(defaultMsTimeout);
+    return getAccessPoints(defaultLongMsTimeout);
   }
   
   /**
@@ -505,10 +519,10 @@ public class ESP8266 {
    * @throws ProtocolException  If mode returned does not match expected specification.
    */
   public WifiModeEnum getWifiMode(long msTimeout) throws IOException, ResponseTimeoutException, ProtocolException {
-    sendCommand(GETWIFIMODE);
-    readForResponse(REPLY_WIFI_MODE, msTimeout);
+    sendCommand(AT_CMD_GET_WIFI_MODE);
+    readForResponse(AT_RSP_WIFI_MODE, msTimeout);
     String mode = new String(readIntoByteBuffer('\r', 1, msTimeout).array(), defaulCharset);
-    readForResponse(RESPONSE_OK, msTimeout);
+    readForResponse(AT_RSP_OK_CRLF, msTimeout);
     return WifiModeEnum.getEnum(mode);
   }
 
@@ -531,12 +545,12 @@ public class ESP8266 {
    * @throws ResponseTimeoutException   Thrown if the timeout waiting for a reply failed.
    */
   public void setWifiMode(WifiModeEnum mode, long msTimeout) throws IOException, ResponseTimeoutException {
-    sendCommand(SETWIFIMODE + mode.getCode());
+    sendCommand(AT_CMD_SET_WIFI_MODE + mode.getCode());
     String response = readLine(20, msTimeout);
-    if (response.equals(NOCHANGE)) {
+    if (response.equals(AT_RSP_NO_CHANGE)) {
       return;
     }
-    readForResponse(RESPONSE_OK, msTimeout);
+    readForResponse(AT_RSP_OK_CRLF, msTimeout);
   }
 
   /**
@@ -558,8 +572,9 @@ public class ESP8266 {
    * @throws ResponseFailedException    Thrown if the command reply is not as expected.
    */
   public void restart(long msTimeout) throws IOException, ResponseTimeoutException, ResponseFailedException {
-    sendCommand(RESTART);
-    readForResponse(READY, msTimeout);
+    sendCommand(AT_CMD_RESTART);
+    readForResponse(AT_RSP_READY_CRLF, msTimeout);
+    // Keep echo off, otherwise, commands will start timing out due to unexpected echoed commands.
     disableEcho();
   }
 
@@ -567,11 +582,11 @@ public class ESP8266 {
    * Restart the module. This need to be done when changing Wifi mode.
    *
    * @throws IOException        If the serial port has a problem.
-   * @throws ResponseTimeoutException   Thrown if the default timeout waiting for a reply expired.
+   * @throws ResponseTimeoutException   Thrown if the long default timeout waiting for a reply expired.
    * @throws ResponseFailedException    Thrown if the command reply is not as expected.
    */
   public void restart() throws IOException, ResponseTimeoutException, ResponseFailedException {
-    restart(defaultMsTimeout);
+    restart(defaultLongMsTimeout);
   }
 
   /**
@@ -583,9 +598,9 @@ public class ESP8266 {
    * @throws ResponseTimeoutException   Thrown if the msTimeout waiting for a reply expired.
    */
   public String getIPAddress(long msTimeout) throws IOException, ResponseTimeoutException {
-    sendCommand(GETIP);
+    sendCommand(AT_CMD_GET_IP);
     String ip = readLine(20, msTimeout);
-    readForResponse(RESPONSE_OK, msTimeout);
+    readForResponse(AT_RSP_OK_CRLF, msTimeout);
     return ip;
   }
 
@@ -610,11 +625,11 @@ public class ESP8266 {
    */
   public void setMuxMode(boolean mux, long msTimeout) throws IOException, ResponseTimeoutException {
     if (mux) {
-      sendCommand(SETMUXMODE + "1");
+      sendCommand(AT_CMD_SET_MUX_MODE + "1");
     } else {
-      sendCommand(SETMUXMODE + "0");
+      sendCommand(AT_CMD_SET_MUX_MODE + "0");
     }
-    readForResponse(RESPONSE_OK, msTimeout);
+    readForResponse(AT_RSP_OK_CRLF, msTimeout);
   }
 
   /**
@@ -627,24 +642,209 @@ public class ESP8266 {
     setMuxMode(mux, defaultMsTimeout);
   }
 
+  /**
+   * Start listening for TCP connections on a given port. If port is zero, port 333 will be used.
+   * @param port                        The TCP port to start up as a listening server.
+   * @param msTimeout                   Timeout waiting for command to reply.
+   * @throws IOException                If the serial port has a problem.
+   * @throws ResponseTimeoutException   Thrown if the msTimeout waiting for a reply expired.
+   */
   public void startTCPServer(int port, long msTimeout) throws IOException, ResponseTimeoutException {
     if (port > 0) {
-      sendCommand(SETIPSERVER + "1," + port);
+      sendCommand(AT_CMD_SET_IP_SERVER + "1," + port);
     } else {
-      sendCommand(SETIPSERVER + "1");
+      sendCommand(AT_CMD_SET_IP_SERVER + "1");
     }
-    readForResponse(RESPONSE_OK, msTimeout);
+    readForResponse(AT_RSP_OK_CRLF, msTimeout);
   }
 
-//  public void replyReady()
-/*
-  public void startUDPCommunication(int connectionId, 
-      String remoteIPAddress, 
+  /**
+   * Start listening for TCP connections on a given port. If port is zero, port 333 will be used.
+   * 
+   * @param port                        The TCP port to start up as a listening server.
+   * @throws IOException                If the serial port has a problem.
+   * @throws ResponseTimeoutException   Thrown if the default timeout waiting for a reply expired.
+   */
+  public void startTCPServer(int port) throws IOException, ResponseTimeoutException {
+    startTCPServer(port, defaultMsTimeout);
+  }
+
+  /**
+   * Start UDP client. If udpPeerMode is USEDEFINEDREMOTE, UDP packets will be received from the remoteIP and remotePort.
+   * If udpPeerMode is CHANGEREMOTEONCE, then upon first receipt, the remote target will be changed to the peer the first
+   * packet is received from. If udpPeerMode is ESTABLISHPEER, then with every UDP receipt, then the remote target will
+   * be changed for each reply.
+   * 
+   * @param remoteIP        The remote peer to reply to.
+   * @param remotePort      The remote port on the peer to reply to.
+   * @param localPort       The local port receiving UDP packets.
+   * @param udpPeerMode     The mode that describes how peering will be established.
+   * @param msTimeout       The timeout in milliseconds to wait for the start command confirmation.
+   * @throws IOException                If the serial port has a problem.
+   * @throws ResponseTimeoutException   Thrown if the timeout waiting for a reply expired.
+   * @throws ResponseFailedException    Thrown if the command reply is not as expected.
+   */
+  public void startUDPClient(String remoteIP, 
       int remotePort, 
       int localPort, 
-      UDPPeerModeEnum udpPeerMode) {
-    sendCommand(IPSTART + connectionId + ",UDP," + "\"" + remoteIPAddress + "\"," + remotePort + "," + localPort + "," + udpPeerMode.getCode());
-
+      UDPPeerModeEnum udpPeerMode, 
+      long msTimeout) throws 
+      IOException, 
+      ResponseFailedException, 
+      ResponseTimeoutException {
+    sendCommand(AT_CMD_SET_IP_START + "\"UDP\"" + ",\"" + remoteIP + "\"," + remotePort + "," + localPort + "," + udpPeerMode.getCode());
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
   }
-*/
+
+  /**
+   * Start UDP client. If udpPeerMode is USEDEFINEDREMOTE, UDP packets will be received from the remoteIP and remotePort.
+   * If udpPeerMode is CHANGEREMOTEONCE, then upon first receipt, the remote target will be changed to the peer the first
+   * packet is received from. If udpPeerMode is ESTABLISHPEER, then with every UDP receipt, then the remote target will
+   * be changed for each reply.
+   * 
+   * @param remoteIP        The remote peer to reply to.
+   * @param remotePort      The remote port on the peer to reply to.
+   * @param localPort       The local port receiving UDP packets.
+   * @param udpPeerMode     The mode that describes how peering will be established.
+   * @throws IOException                If the serial port has a problem.
+   * @throws ResponseTimeoutException   Thrown if the default timeout waiting for a reply expired.
+   * @throws ResponseFailedException    Thrown if the command reply is not as expected.
+   */
+  public void startUDPClient(String remoteIP, 
+  int remotePort, 
+  int localPort, 
+  UDPPeerModeEnum udpPeerMode) throws 
+  IOException, 
+  ResponseFailedException, 
+  ResponseTimeoutException {
+    startUDPClient(remoteIP, remotePort, localPort, udpPeerMode, defaultMsTimeout);
+  }
+
+  /**
+   * Send a buffer of byte data.
+   * 
+   * @param buffer                    The buffer of data to send.
+   * @param msTimeout                 The timeout waiting for send confirmation.
+   * @throws IOException              Throws in the serial port has a problem.
+   * @throws ResponseFailedException  Thrown if the send command returns an error.
+   * @throws ResponseTimeoutException Thrown if waiting for the send reply msTimeout expires.
+   */
+  public void send(ByteBuffer buffer, long msTimeout) throws IOException, ResponseFailedException, ResponseTimeoutException {
+    int length = buffer.limit();
+    sendCommand(AT_CMD_SEND + length);
+    try {
+      while(true) {
+        outputStream.write(buffer.get());
+      }
+    } catch (BufferUnderflowException e) {
+      // This is expected once buffer is empty
+    }
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
+  }
+
+  /**
+   * Send a buffer of byte data.
+   * 
+   * @param buffer                    The buffer of data to send.
+   * @throws IOException              Thrown in the serial port has a problem.
+   * @throws ResponseFailedException  Thrown if the send command returns an error.
+   * @throws ResponseTimeoutException Thrown if waiting for the default send reply timeout expires.
+   */
+  public void send(ByteBuffer buffer) throws IOException, ResponseFailedException, ResponseTimeoutException {
+    send(buffer, defaultMsTimeout);
+  }
+
+  /**
+   * Receive data from a remote host into a buffer.
+   * 
+   * @param buffer                    The buffer for receiving the data.
+   * @param msTimeout                 The total time in milliseconds that wait for receipt of data. Baud rate will have an impact in concert with amount of data received.
+   * @throws IOException              Thrown if the serial port has a problem.
+   * @throws ResponseTimeoutException Thrown if the receiving the data exceeds the msTimeout.
+   */
+  public void receive(ByteBuffer buffer, long msTimeout) throws IOException, ResponseTimeoutException {
+    // Start timeout timer
+    long startTime = System.currentTimeMillis();
+    int count = 0;
+
+    // Read until "+IPD,"
+    readForResponse(AT_CMD_RECEIVE, CLIENT_CONNECT_TIMEOUT);
+
+    // Now get the length of data to receive
+    ByteBuffer lengthBuffer = readIntoByteBuffer(':', 10, defaultMsTimeout);
+    // Ignore the colon
+    byte[] truncatedLengthBuffer = new byte[lengthBuffer.position()-1];
+    lengthBuffer.flip();
+    lengthBuffer.get(truncatedLengthBuffer);
+    // Convert byte array to string version
+    int length = Integer.parseInt(new String(truncatedLengthBuffer, defaulCharset));
+
+    // Read all data teed up based on the length sent
+    while (count <= length) {
+      // Spin until data is ready
+      while (inputStream.available() == 0 && (System.currentTimeMillis() < (startTime + msTimeout))) {};
+      // If the timeout is exceeded, bail out.
+      if (System.currentTimeMillis() > (startTime + msTimeout)) {
+        throw new ResponseTimeoutException();
+      }
+      try {
+        buffer.put((byte)inputStream.read());
+      } catch (BufferOverflowException e) {
+        // This is expected...just keep reading until done.
+      }
+      count++;
+    }
+  }
+
+  /**
+   * Join the ESP8266 to a remote access point.
+   * 
+   * @param SSID                        The SSID of the remote access point for the ESP8266 to connect to in STATION or BOTH mode.
+   * @param password                    The password of the remote access point.
+   * @param msTimeout                   The timeout in milliseconds waiting for completion to join the network.
+   * @throws IOException
+   * @throws ResponseFailedException
+   * @throws ResponseTimeoutException
+   */
+  public void joinAccessPoint(String SSID, String password, long msTimeout) throws IOException, ResponseFailedException, ResponseTimeoutException {
+    sendCommand(AT_CMD_JOIN_ACCESS_POINT + "\"" + SSID + "\",\"" + password + "\"");
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_FAIL_CRLF, msTimeout);
+  }
+
+  /**
+   * Join the ESP8266 to a remote access point.
+   * 
+   * @param SSID                        The SSID of the remote access point for the ESP8266 to connect to in STATION or BOTH mode.
+   * @param password                    The password of the remote access point.
+   * @throws IOException
+   * @throws ResponseFailedException
+   * @throws ResponseTimeoutException
+   */
+  public void joinAccessPoint(String SSID, String password) throws IOException, ResponseFailedException, ResponseTimeoutException {
+    joinAccessPoint(SSID, password, defaultLongMsTimeout);
+  }
+
+  /**
+   * Close an open IP client from sending/receiving packets.
+   * 
+   * @param msTimeout                   The time in milliseconds that await for the close to complete.
+   * @throws IOException
+   * @throws ResponseFailedException
+   * @throws ResponseTimeoutException
+   */
+  public void closeIPClient(long msTimeout) throws IOException , ResponseFailedException, ResponseTimeoutException {
+    sendCommand(AT_CMD_IP_CLOSE);
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
+  }
+
+  /**
+   * Close an open IP client from sending/receiving packets.
+   * 
+   * @throws IOException
+   * @throws ResponseFailedException
+   * @throws ResponseTimeoutException
+   */
+  public void closeIPClient() throws IOException , ResponseFailedException, ResponseTimeoutException {
+    closeIPClient(defaultMsTimeout);
+  }
 }
