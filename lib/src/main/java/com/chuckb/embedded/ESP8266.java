@@ -30,7 +30,7 @@ public class ESP8266 {
   // Timeouts
   private final int CLIENT_CONNECT_TIMEOUT = 10000;          // When waiting on a data packet arrive
   public long defaultMsTimeout = 200;                       // The default timeout waiting for general responses
-  public long defaultLongMsTimeout = 3000;                  // For certain long operations, like a restart, or finding access points, this timeout will be used.
+  public long defaultLongMsTimeout = 4000;                  // For certain long operations, like a restart, or finding access points, this timeout will be used.
   
   // AT Commands
   private final String AT_CMD_AT = "AT";
@@ -46,7 +46,6 @@ public class ESP8266 {
   private final String AT_CMD_DISABLE_ECHO = "ATE0";
   private final String AT_CMD_ENABLE_ECHO = "ATE1";
   private final String AT_CMD_SEND = "CIPSEND=";
-  private final String AT_CMD_RECEIVE = "+IPD,";
   private final String AT_CMD_JOIN_ACCESS_POINT = "CWJAP=";
   private final String AT_CMD_IP_CLOSE = "CIPCLOSE";
   
@@ -59,6 +58,7 @@ public class ESP8266 {
   private final String AT_RSP_NO_CHANGE = "no change";
   private final String AT_RSP_READY_CRLF = "ready\r\n";
   private final String AT_RSP_WIFI_MODE = "+CWMODE:";
+  private final String AT_RSP_RECEIVE = "+IPD,";
 
   public enum WifiModeEnum 
   { 
@@ -231,7 +231,7 @@ public class ESP8266 {
     while(System.currentTimeMillis() < (startTime + msTimeout)) {
       if (canRead()) {
         int nextCharacter = inputStream.read();
-
+// System.out.print((char) nextCharacter);
         // Check and update the pass case
         if (nextCharacter == passBytes[passedMatchedChars]) {
           passedMatchedChars++;
@@ -721,6 +721,43 @@ public class ESP8266 {
   }
 
   /**
+   * Start TCP client.
+   * 
+   * @param remoteIP        The remote peer to reply to.
+   * @param remotePort      The remote port on the peer to reply to.
+   * @param msTimeout       The timeout in milliseconds to wait for the start command confirmation.
+   * @throws IOException                If the serial port has a problem.
+   * @throws ResponseTimeoutException   Thrown if the timeout waiting for a reply expired.
+   * @throws ResponseFailedException    Thrown if the command reply is not as expected.
+   */
+  public void startTCPClient(String remoteIP, 
+      int remotePort, 
+      long msTimeout) throws 
+      IOException, 
+      ResponseFailedException, 
+      ResponseTimeoutException {
+    sendCommand(AT_CMD_SET_IP_START + "\"TCP\"" + ",\"" + remoteIP + "\"," + remotePort);
+    readForResponses(AT_RSP_OK_CRLF, AT_RSP_ERROR_CRLF, msTimeout);
+  }
+
+  /**
+   * Start UDP client.
+   * 
+   * @param remoteIP        The remote peer to reply to.
+   * @param remotePort      The remote port on the peer to reply to.
+   * @throws IOException                If the serial port has a problem.
+   * @throws ResponseTimeoutException   Thrown if the default timeout waiting for a reply expired.
+   * @throws ResponseFailedException    Thrown if the command reply is not as expected.
+   */
+  public void startTCPClient(String remoteIP, 
+  int remotePort) throws 
+  IOException, 
+  ResponseFailedException, 
+  ResponseTimeoutException {
+    startTCPClient(remoteIP, remotePort, defaultMsTimeout);
+  }
+
+  /**
    * Send a buffer of byte data.
    * 
    * @param buffer                    The buffer of data to send.
@@ -768,7 +805,7 @@ public class ESP8266 {
     int count = 0;
 
     // Read until "+IPD,"
-    readForResponse(AT_CMD_RECEIVE, CLIENT_CONNECT_TIMEOUT);
+    readForResponse(AT_RSP_RECEIVE, CLIENT_CONNECT_TIMEOUT);
 
     // Now get the length of data to receive
     ByteBuffer lengthBuffer = readIntoByteBuffer(':', 10, defaultMsTimeout);
@@ -782,7 +819,7 @@ public class ESP8266 {
     // Read all data teed up based on the length sent
     while (count <= length) {
       // Spin until data is ready
-      while (inputStream.available() == 0 && (System.currentTimeMillis() < (startTime + msTimeout))) {};
+      while (!canRead() && (System.currentTimeMillis() < (startTime + msTimeout))) {};
       // If the timeout is exceeded, bail out.
       if (System.currentTimeMillis() > (startTime + msTimeout)) {
         throw new ResponseTimeoutException();
