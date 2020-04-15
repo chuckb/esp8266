@@ -5,6 +5,11 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.Set;
+import java.util.function.Supplier;
+
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 
 import com.chuckb.embedded.AccessPoint;
 import com.chuckb.embedded.ESP8266;
@@ -19,6 +24,21 @@ import com.fazecast.jSerialComm.*;
  * Establish a connection with a serial dongle from your host to the ESP8266.
  */
 public class Main {
+  public static String getInput(String prompt) {
+    if (System.console() == null) {
+      JOptionPane.showMessageDialog(
+        ((Supplier<JDialog>) () -> {
+          final JDialog dialog = new JDialog();
+          dialog.setAlwaysOnTop(true); 
+          dialog.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+          return dialog;
+        }).get(), prompt);
+      return "";
+    } else {
+      return System.console().readLine();
+    }
+  }
+
   public static void main(String[] args) throws IOException, ProtocolException, ResponseFailedException, ResponseTimeoutException {
     String port = "COM5";                 // Comm port connected to the ESP8266 (on Windows, COMx...use mode command to find)
     String SSID = "ROBOT";                // When testing as a station, this is the SSID of the access point to connect the client to
@@ -68,17 +88,15 @@ public class Main {
           System.out.println("My address: " + esp8266.getIPAddress());
           System.out.println("Perform UDP tests...");
           System.out.println("On a host connected to the " + SSID + " access point, run `nc -u -l " + remotePort + "`");
-          System.out.println("Press enter when ready...");
-          System.console().readLine();
+          getInput("Press enter when ready...");
           esp8266.startUDPClient(remoteIP, remotePort, localPort, ESP8266.UDPPeerModeEnum.USEDEFINEDREMOTE);
           communicationTest(esp8266);
           esp8266.restart();                                // This should not be needed, but there appears to be a bug clearing the UDP client settings. (Fixed in 019 firmware evidently)
           System.out.println("Restarted module.");
           System.out.println("Perform TCP tests...");
           System.out.println("On a host connected to the " + SSID + " access point, run `nc -l " + remotePort + "`");
-          System.out.println("Press enter when ready...");
-          System.console().readLine();
-          esp8266.startTCPClient(remoteIP, remotePort);
+          getInput("Press enter when ready...");
+          esp8266.startTCPClient(remoteIP, remotePort, 500);
           communicationTest(esp8266);
         }
       }
@@ -87,14 +105,14 @@ public class Main {
       System.out.println("Comm port " + port + " closed.");
     }
     System.out.println("Done!");
+    System.exit(0);
   }
 
   public static void communicationTest(ESP8266 esp8266) throws IOException, ResponseFailedException, ResponseTimeoutException, ProtocolException {
     byte[] knockBytes = "Knock, knock?".getBytes(Charset.forName("US-ASCII"));
     esp8266.send(ByteBuffer.wrap(knockBytes), 300);
     System.out.println("Knock, knock?");
-    System.out.println("After pressing enter, go to host and enter `Who there<return>`...");
-    System.console().readLine();
+    getInput("After pressing enter, go to host and enter `Who there<return>`...");
     System.out.println("Waiting for Who there...");
     ByteBuffer whoThere = ByteBuffer.allocate(20);
     esp8266.receive(whoThere, 10000);

@@ -9,12 +9,33 @@ This library has been coded and tested against the [AI Thinker revision 018 of t
 - Java JDK (my version was `openjdk 11.0.1-redhat 2018-10-16 LTS`, but earlier versions would probably work)
 - A USB TTL serial cable like [this one from Adafruit](https://www.adafruit.com/product/954)
 - An ESP-01 like [this one](https://solarbotics.com/product/29246/)
-- A 3.3v power supply
+- A 3.3v power supply or alternative to get 5v down to somewhere between 3.3 and 4v @ 250ma
+  - In my example, I use the voltage drop of a standard germanium diode (0.7v) to get voltage in range.
 
-## OS Usage Example
+## OS Usage Demo Example
 To run the operating system specific example (tested on Windows 10 but should work on OSX and Linux):
 1. Clone the repo
 2. Connect TTL cable to ESP-01 like this:
+```
+                               +------------+  +------------------------------+
+                               |            |  |                              |
+   +-----------+   +---->|-----+----)|----+ |  | +-------------+              |
+   |   CP2012  |   |  1N4148      100 mfd | |  | |    ESP-01   |              |
+   |           |   |                      | |  +-+ TX      GND +---|'         |
+   |   +5v Red +----                      | |    |             |              |
+   |           |                          | +----+ CH_PD GPIO2 +              |
+   | Gnd Black +------------------+-------+ |    |             |              |
+   |           |                  |         |    + RST   GPIO0 +              |
+   |  Tx Green +------------+     __        |    |             |              |
+   |           |            |      '        +----+ VCC      RX +----+         |
+   |  Rx White +----+       |                    |             |    |         |
+   |           |    |       |                    +-------------+    |         |
+   +-----------+    |       |                                       |         |
+                    |       +---------------------------------------+         |
+                    |                                                         |
+                    +---------------------------------------------------------+
+                  
+```
 3. Change constants within `./samples/os/src/main/java/Main.java` according to comments to match your wifi environment.
 4. Change directory to `./samples/os`
 5. `gradlew run`
