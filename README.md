@@ -10,7 +10,7 @@ This library has been coded and tested against the [AI Thinker revision 018 of t
 - A USB TTL serial cable like [this one from Adafruit](https://www.adafruit.com/product/954)
 - An ESP-01 like [this one](https://solarbotics.com/product/29246/)
 - A 3.3v power supply or alternative to get 5v down to somewhere between 3.3 and 4v @ 250ma
-  - In my example, I use the voltage drop of a standard germanium diode (0.7v) to get voltage in range, and connected it to the supply from the USB cable (which is capable of 500 ma).
+  - In my example, I use the voltage drop of a standard germanium diode (0.7v) to get voltage in range, and connected it to the supply from the USB cable (which is capable of 500 ma). Note: the specs say ESP-01 voltage requirement is 3.3v - I take no responsibility if this unregulated overvolt technique burns out your board. It works for mine.
 
 ## OS Usage Demo Example
 To run the operating system specific example (tested on Windows 10 but should work on OSX and Linux):
