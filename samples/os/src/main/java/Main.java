@@ -21,10 +21,16 @@ import com.fazecast.jSerialComm.*;
 /**
  * System test for ESP8266 class. Exercise methods using a Java serial class that supports
  * Windows, Mac, and Linux. Output from this test will print to the system console.
- * Establish a connection with a serial dongle from your host to the ESP8266.
+ * Input will come from a console if it is wired up to a command line, like when running directly from VSCode
+ * for example, or from Java directly. Running from gradle, however, will cause a swing dialog
+ * to display for prompting.
+ * 
+ * <p>Establish a connection with a serial dongle from your host to the ESP8266.</p>
  */
 public class Main {
   public static String getInput(String prompt) {
+    // This little workaround deals with the fact that gradle does not expose the sysin console.
+    // And so a swing dialog is presented as a workaround to solicit user prompting.
     if (System.console() == null) {
       JOptionPane.showMessageDialog(
         ((Supplier<JDialog>) () -> {
